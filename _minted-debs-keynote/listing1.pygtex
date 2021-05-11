@@ -1,0 +1,5 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{SELECT} \PYG{n}{messages}\PYG{p}{.}\PYG{o}{*}\PYG{p}{,} \PYG{n}{profiles}\PYG{p}{.}\PYG{n}{photo\PYGZus{}url}
+\PYG{k}{FROM} \PYG{n}{messages}
+\PYG{k}{JOIN} \PYG{n}{profiles} \PYG{k}{ON} \PYG{n}{messages}\PYG{p}{.}\PYG{n}{sender\PYGZus{}id} \PYG{o}{=} \PYG{n}{profiles}\PYG{p}{.}\PYG{n}{user\PYGZus{}id}
+\end{Verbatim}

@@ -1,0 +1,3 @@
+SELECT messages.*, profiles.photo_url
+FROM messages
+JOIN profiles ON messages.sender_id = profiles.user_id
