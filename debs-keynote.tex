@@ -6,7 +6,7 @@
 \hyphenation{time-stamp time-stamps re-con-cilia-tion data-center}
 
 \begin{document}
-\title{TODO: Title}
+\title{Thinking in Events: From Databases to Distributed Collaboration Software}
 \subtitle{Keynote at the 15th ACM International Conference on Distributed and Event-Based Systems}
 
 \author{Martin Kleppmann}
@@ -55,6 +55,11 @@ TODO: Abstract
 \keywords{stream processing, event sourcing, CRDTs, state machine replication}
 \maketitle
 
+\def\figureautorefname{Figure}
+\def\sectionautorefname{Section}
+\def\subsectionautorefname{Section}
+\def\subsubsectionautorefname{Section}
+
 % Title: Event-based thinking in collaboration software
 
 % What do Google Docs and stream processing have in common? Both are centered around the idea of streams of events. In the case of Google Docs and other collaboration software, each event describes a change that a user has made to a document. Each user's local device has a copy of the shared document, and processing the stream of changes means updating this local copy so that it is consistent with all of the other users' copies of the document.
@@ -66,7 +71,7 @@ TODO: Abstract
 \section{A Taxonomy of Event-based Systems}
 
 The term \emph{event} is used in many different ways in different branches of computing.
-Many authors talk about events without always being explicit about the precise context they are referring to.
+Many authors talk about events without always being explicit about the exact context they are referring to.
 In order to facilitate a precise discussion of the trade-offs, I present a taxonomy that categorises the different uses of events, based on the flowchart in \autoref{fig:flowchart}.
 Such a broad-brush taxonomy cannot necessarily capture all of the nuance of the field, and sometimes the boundaries between categories can be blurry.
 Nevertheless, I hope that it will be a useful tool for structuring discussions.
@@ -125,14 +130,14 @@ Some databases provide facilities such as \emph{materialized view maintenance} a
 
 Many programming models for distributed systems are based on sending and receiving messages, and the receipt of a message can also be seen as a notification event that triggers the execution of application code.
 For example, the \emph{actor model} is a widely-used approach in which multiple actors or lightweight threads, potentially located on different machines, communicate by sending each other messages.
-In many actor systems these messages are ephemeral (they might be lost if a part of the system crashes or if the network is unreliable), but some actor frameworks also include persistence mechanisms for actor state and/or the messaging middleware.
+In many distributed systems these messages are ephemeral (they might be lost if a part of the system crashes or if the network is unreliable), but some actor frameworks and messaging middleware systems also include persistence mechanisms for actor state and/or messages.
 For the purposes of this taxonomy I will reserve the term ``persistent'' for those systems in which message delivery is reliable, data is durable, and all state in the system is preserved in case of a crash or network fault; any systems with best-effort message delivery fall into the ``ephemeral notifications'' category.
 
 \subsection{Windowing in stream processing}\label{sec:windowing}
 
 Zooming in on the systems that provide both persistence and notifications, we can further differentiate them by examining the kind of logic that can be performed in response to an event.
 The very simplest stream processors use stateless operators, in which every event can be processed independently of any other event, based only on the information in that event (for example, selecting events where a certain property of the event falls within some set of values).
-Most interesting applications also require event processing logic that combines information from several events: in database parlance, a \emph{join} or \emph{grouping} of events.
+However, stateless processing is rarely sufficient, and most interesting applications also require event processing logic that combines information from several events: in database parlance, a \emph{join} or \emph{grouping} of events.
 Events may be combined by aggregation (e.g.\ computing the count, sum, or average of some property of a set of events), by emitting compound events that include properties from several input events, or by more complex state machines that we discuss in \autoref{sec:smr}.
 
 Some stream processing systems are designed primarily for applications in which the events that need to be combined occur fairly close together in time.
@@ -172,9 +177,9 @@ Read-only transactions may or may not correspond to events, depending on the sys
 
 In such a database system, the replication infrastructure ensures that every event corresponding to a committed transaction is eventually processed by every non-faulty replica.
 We can classify such replication systems into two broad categories: those that arrange the replication events into a log, and those that use some other replication mechanism (such as gossip protocols, anti-entropy, or clients independently updating several replicas).
-The key properties of a log are that the events in it are totally ordered (i.e.\ all replicas observe the log entries in the same order), and it is append-only (i.e.\ if a replica observes log entry A immediately followed by log entry B, then there will never be a log entry C that appears between A and B in the total order).
+The key properties of a log are that the events in it are totally ordered (i.e.\ all replicas observe the log entries in the same order), and it is append-only (i.e.\ if a replica observes log entry $A$ immediately followed by log entry $B$, then there will never be a log entry $C$ that appears between $A$ and $B$ in the total order).
 
-This append-only log is constructed either using a consensus protocol such as Raft or Multi-Paxos, or by designating one replica as the \emph{leader} (also known as master or primary) and all other replicas as followers (aka slaves or secondary).
+This append-only log is constructed either using a consensus protocol such as Raft or Multi-Paxos, or by designating one replica as the \emph{leader} (also known as master or primary) and all other replicas as followers (aka slaves or secondary replicas).
 In fact, most consensus protocols are essentially leader-based replication combined with an automatic mechanism for electing a new leader if the current leader fails.
 The leader decides on the order in which events should be appended to the log, and all other replicas process the events in the order decided by the leader.
 
@@ -192,16 +197,16 @@ In state machine replication (SMR) and event sourcing, the application does not 
 Instead, the application defines a set of event types that may occur, and whenever something happens, an event of the appropriate type is appended to an event log.
 All replicas subscribe to this event log, and each replica processes events in the order in which they appear in the log.
 The event processing function can use arbitrary logic to update the database state, as long as it is deterministic and it depends only on the current database state and the content of the event.
-Provided that each replica processes the same sequence of events in the same order, and each replica starts in the same initial state (e.g.\ an empty database), the deterministic event processing logic ensures that all replicas end up in the same final state.
+Provided that each replica processes the same sequence of events in the same order, and each replica starts in the same initial state (e.g.\ an empty database), the deterministic event processing logic ensures that all replicas move through the same sequence of states and end up in the same final state.
 We can think of each replica as a state machine whose state is its copy of the database, and whose state transition function is the event processing function.
-Put another way, the database state is a materialised view into the underlying event log.
+Put another way, the database state is a materialised view onto the underlying event log.
 
 An advantage of this approach is that well-designed events often capture the intent and meaning of operations better than events that are a mere side-effect of a state mutation.
 For example, ``student $x$ cancelled their enrollment in course $y$ for reason $z$'' is a clear descriptive event, whereas ``one row was deleted from the \verb+enrollments+ table, one row was added to the \verb+cancellation_reasons+ table, and the \verb+available_places+ field of a course was incremented'' is a much less clear description that embeds a lot of irrelevant detail about the current database schema.
 An event log thus makes it easier for the people who work with a system to understand how it got into a particular state, which can help with audit and debugging.
 
 Another advantage of an event log is that it can be replayed in order to rebuild the resulting database state.
-If the application developers wish to change the logic for processing an event, for example to change the resulting database schema or to fix a bug, they can set up a new replica, replay the existing event log using the new processing function, and then switch clients to reading from the new replica instead of the old one.
+If the application developers wish to change the logic for processing an event, for example to change the resulting database schema or to fix a bug, they can set up a new replica, replay the existing event log using the new processing function, switch clients to reading from the new replica instead of the old one, and then decommission the old replica.
 This sort of retroactive change in business logic is not usually possible in state-mutation databases.
 It is easy to maintain several different views onto the same underlying event log if needed.
 As long as the rate of updates is not too high, it is often feasible to retain the event log indefinitely and replay it occasionally as needed.
@@ -210,20 +215,148 @@ Blockchains and distributed ledgers also use SMR, in which case the chain of blo
 
 The downside of the event sourcing/SMR approach is that it is less familiar to most application developers than mutable-state databases, and the level of indirection between the event log and the resulting database state adds complexity in some types of applications that are more easily expressed in terms of state mutations.
 
-\subsection{Events with a partial order}
+\subsection{Partially ordered events}\label{sec:partial-order}
 
 Both WAL-based replication and SMR depend crucially on the assumptions that all replicas process events in exactly the same order.
 Within a single datacenter, this is a reasonable assumption, since leader-based replication and consensus protocols work well in this setting.
 However, if replicas are distributed across multiple geographic locations, or if the network between replicas is unreliable, constructing a log becomes expensive, since appending an event to the log requires at waiting least one network round-trip to the leader and/or a quorum of replicas.
 In the extreme case, if we want a replica to be able to generate and process events even while it is completely disconnected from all other replicas (a system that is ``available'' and ``partition-tolerant'' in the sense of the CAP theorem~\cite{Gilbert:2002}), the assumption of a totally ordered log becomes impossible to satisfy.
 
-In a system that allows disconnected operation it is still possible to enforce a total order for events; however, those events do not necessarily form a log because the structure is not append-only.
+In a system that allows disconnected operation, the strongest order we can guarantee is causal order~\cite{Attiya:2015}.
+This is a \emph{partial} order, in contrast to the total order of a log.
+In a causally ordered system, some events \emph{happened before} other events~\cite{Lamport:1978}, and those events are processed in the same order by all relicas.
+However, other events may be \emph{concurrent}, which means that neither happened before the other; in this case, different replicas may process those events in a different order.
 
-% TODO: figure showing how timestamps from different replicas get interleaved
+\begin{figure*}
+  \centering\vspace{2em}
+  \begin{tikzpicture}[auto,scale=1.0]
+	\tikzstyle{state}=[matrix,column sep={24pt,between origins},anchor=west]
+	\tikzstyle{val}=[draw,anchor=base,minimum width=24pt,text height=8pt,text depth=3pt]
+	\tikzstyle{oid}=[anchor=base]
+	\tikzstyle{ins1}=[fill=red!10]
+	\tikzstyle{ins2}=[fill=blue!10]
+	\tikzstyle{time}=[thick,->]
+	\tikzstyle{network}=[thick,dashed,blue,-{Stealth[length=3mm]}]
+	\node at (0,4) [anchor=west] {Replica $A$:};
+	\node at (0,1) [anchor=west] {Replica $B$:};
+	\node (a1) at (0,3) [state] {
+		\node [val] {$a$}; &
+		\node [val] {$b$}; \\
+		\node [oid] {$(1,A)$}; &
+		\node [oid] {$(2,A)$}; \\
+	};
+	\node (b1) at (0,0) [state] {
+		\node [val] {$a$}; &
+		\node [val] {$b$}; \\
+		\node [oid] {$(1,A)$}; &
+		\node [oid] {$(2,A)$}; \\
+	};
+	\node (a2) at (5,3) [state] {
+		\node [val] {$a$}; &
+		\node [val] {$b$}; &
+		\node [val,ins1] {$c$}; &
+		\node [val,ins1] {$d$}; \\
+		\node [oid] {$(1,A)$}; &
+		\node [oid] {$(2,A)$}; &
+		\node [oid] {$(3,A)$}; &
+		\node [oid] {$(4,A)$}; \\
+	};
+	\node (b2) at (5,0) [state] {
+		\node [val] {$a$}; &
+		\node [val] {$b$}; &
+		\node [val,ins2] {$x$}; &
+		\node [val,ins2] {$y$}; \\
+		\node [oid] {$(1,A)$}; &
+		\node [oid] {$(2,A)$}; &
+		\node [oid] {$(3,B)$}; &
+		\node [oid] {$(4,B)$}; \\
+	};
+	\node (a3) at (12,3) [state] {
+		\node [val] {$a$}; &
+		\node [val] {$b$}; &
+		\node [val,ins1] {$c$}; &
+		\node [val,ins2] {$x$}; &
+		\node [val,ins1] {$d$}; &
+		\node [val,ins2] {$y$}; \\
+		\node [oid] {$(1,A)$}; &
+		\node [oid] {$(2,A)$}; &
+		\node [oid] {$(3,A)$}; &
+		\node [oid] {$(3,B)$}; &
+		\node [oid] {$(4,A)$}; &
+		\node [oid] {$(4,B)$}; \\
+	};
+	\node (b3) at (12,0) [state] {
+		\node [val] {$a$}; &
+		\node [val] {$b$}; &
+		\node [val,ins1] {$c$}; &
+		\node [val,ins2] {$x$}; &
+		\node [val,ins1] {$d$}; &
+		\node [val,ins2] {$y$}; \\
+		\node [oid] {$(1,A)$}; &
+		\node [oid] {$(2,A)$}; &
+		\node [oid] {$(3,A)$}; &
+		\node [oid] {$(3,B)$}; &
+		\node [oid] {$(4,A)$}; &
+		\node [oid] {$(4,B)$}; \\
+	};
+	\draw [time] ([yshift=2mm]a1.east) -- node [above] {append events $c,d$} ([yshift=2mm]a2.west);
+	\draw [time] ([yshift=2mm]a2.east) -- ([yshift=2mm]a3.west);
+	\draw [time] ([yshift=2mm]b1.east) -- node [above] {append events $x,y$} ([yshift=2mm]b2.west);
+	\draw [time] ([yshift=2mm]b2.east) -- ([yshift=2mm]b3.west);
+    \draw [network] (10,3.1) to [out=270,in=90] (10.8,0.3);
+    \draw [network] (10,0.3) to [out=90,in=270] (10.8,3.1);
+	\node [blue,rotate=90,font=\footnotesize] at (11.1,1.7) {network communication};
+	\path [draw,dotted] (0,1.7) -- (17,1.7);
+  \end{tikzpicture}
+  \caption{Obtaining a total order on events using Lamport timestamps, which are $(\mathit{counter}, \mathit{replicaID})$ pairs. Two events with the same $\mathit{counter}$ are ordered by $\mathit{replicaID}$; here we assume that $A<B$.}
+  \label{fig:timestamp-order}
+\end{figure*}
 
-CRDTs~\cite{Shapiro:2011}
+In a partially ordered system it is still possible to enforce a total order on events after the fact, as illustrated in \autoref{fig:timestamp-order}.
+We do this by attaching a logical timestamp to each event; Lamport timestamps~\cite{Lamport:1978} are a common choice.
+These timestamps consist of a counter, which is incremented for every event, together with the globally unique ID of the replica that generated the event.
+In \autoref{fig:timestamp-order}, two replicas initially have the same two events $a$ and $b$ with timestamps $(1,A)$ and $(2,B)$ respectively.
+During a period when the two replicas are disconnected from each other, replica $A$ generates two events $c$ and $d$ with timestamps $(3,A)$ and $(4,A)$ respectively, while concurrently replica $B$ generates events $x$ and $y$ with timestamps $(3,B)$ and $(4,B)$.
+After connectivity is restored, the replicas learn about each others' events, and merge them into a total order.
+This order is defined by first sorting events by the counter portion of their timestamps, and then breaking ties by sorting by replica ID (here we assume $A<B$).
 
-virtual time~\cite{Jefferson:1985}
+Timestamp ordering produces a totally ordered sequence of events, but it is not a log, because new events are not always appended to the end.
+In \autoref{fig:timestamp-order}, when replica $B$ receives event $c$ from $A$, it must insert $c$ ahead of its existing events $x$ and $y$ in its event sequence.
+Similarly, replica $A$ must insert $x$ between its existing events $c$ and $d$.
+In SMR, the total order of events is fixed as soon as an event is processed, but with timestamp ordering, the order may need to be revised as more events are received from other replicas.
+
+It is possible to use timestamp-ordered events in an SMR-like approach: that is, to use a deterministic function to apply events one by one to the current replica state.
+Assuming every replica eventually receives every event, all replicas will eventually have the same timestamp-ordered sequence of events, and thus all replicas will go through the same sequence of states and end up in the same state.
+However, when a replica processes events out of timestamp order (inserting an event somewhere in the middle of the timestamp-ordered sequence), it must be able to roll back the replica state to the time corresponding to the insertion position, apply the new event, and then replay the events whose timestamps are greater than that of the new event.
+This approach is known as \emph{time warp}~\cite{Jefferson:1985}.
+
+The cost of this rollback-and-replay process depends on the degree to which events are received out-of-order.
+If the replicas receive most events in ascending timestamp order, and they only occasionally need to reorder the most recent couple of events, the cost can be modest~\cite{Kuhn:2021}.
+On the other hand, if replicas might generate large numbers of events while disconnected from each other, the cost of merging $n$ events into a linear sequence may become as great as $O(n^2)$.
+
+Moreover, if processing an event may have external side-effects besides updating a replica state~-- for example, if it may trigger an email to be sent~-- then the time warp approach requires some way of undoing or compensating for those side-effects in the case where the processing of an event is affected by a late-arriving event with an earlier timestamp.
+It is not possible to un-send an email once it has been sent, but it is possible to send a follow-up email with a correction in this case.
+If the possibility of such corrections is unacceptable, partially ordered events cannot be used, and SMR must be used instead.
+
+\subsection{Conflict-free Replicated Data Types (CRDTs)}\label{sec:crdts}
+
+In the time warp approach, like in SMR/event sourcing, the events are the primary data model for the application, and the replica state is derived from the events.
+Similarly to \autoref{sec:smr}, we can also choose to swap these roles, so that the mutable replica state is the application's primary data model, and the events are generated automatically as a side-effect of mutating this state.
+If we take the mutable-state approach in the context of a partially ordered system, we obtain a technique called \emph{Conflict-free Replicated Data Types} or CRDTs~\cite{Shapiro:2011}.
+
+CRDTs have been defined for a number of common abstract data types: sets, maps, lists, trees, graphs, and so on.
+Applications may mutate these structures through the operations provided by the data type's interface: for example, a set or a list can be mutated by inserting or deleting elements; a map can be mutated by assigning a value to a key or by deleting a key-value pair.
+These mutations can take place even while a replica is disconnected from the rest of the system.
+
+In operation-based CRDTs, the CRDT algorithm tracks any mutations to a data object and generates events (usually called ``operations'') describing the changes.
+These events are partially ordered; causal ordering, like in \autoref{sec:partial-order}, is a common choice.
+When a replica receives an event generated by another replica, it invokes the CRDT algorithm to update its state.
+This algorithm is carefully designed such that applying concurrent events is commutative: that is, the final state is the same, regardless of the order in which a replica applies a set of concurrent events.
+
+Many CRDT algorithms have behaviour that can equivalently be expressed in the time warp model~\cite{Kleppmann:2018}.
+However, CRDTs have the advantage that they usually do not require the rollback-and-replay process of time warp, so they can offer higher performance~\cite{dePorre:2019}.
+A disadvantage of CRDTs is that they support only the predefined operations offered by the data type's interface: for example, while list CRDTs allow elements to be inserted or deleted, most do not have good support for reordering list items~\cite{Kleppmann:2020}.
+In contrast, the time warp model allows any deterministic, pure function to be used for processing events, making it more flexible.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}{}
