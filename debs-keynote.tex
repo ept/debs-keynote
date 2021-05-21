@@ -393,16 +393,37 @@ In contrast, the time warp model allows any deterministic, pure function to be u
 \label{fig:pushpin}
 \end{figure*}
 
-\section{Practical Examples}
+\section{Practical Examples}\label{sec:practical}
 
 I will close with a personal perspective by briefly discussing practical applications of the models from \autoref{sec:taxonomy}.
 I draw examples from two areas I have directly worked on: stream processing with Apache Kafka and related tools, and collaboration software that allows several people to work together on a shared document.
 
-\subsection{The Kafka Ecosystem}
+\subsection{The Kafka Ecosystem}\label{sec:kafka}
 
-TODO
+Apache Kafka is a publish/subscribe message broker based on event logs~\cite{Kreps:2011,Wang:2015}.
+It is widely used in enterprises where some teams want to publish streams of events relating to their business operations, and other teams want to subscribe to and process those event streams~\cite{Kreps:2013}.
+The Kafka ecosystem includes stream processing frameworks (Kafka Streams, Flink~\cite{Carbone:2015}, Samza~\cite{Kleppmann:2015,Noghabi:2017}), a SQL-based stream query engine (ksqlDB), and tools for change data capture that obtain event streams from external systems such as databases (Kafka Connect, Debezium~\cite{Debezium}).
+Kafka-based stream processors are used for both windowed and non-windowed processing.
 
-\subsection{Local-first Collaboration Software}
+Every event in Kafka belongs to a \emph{topic}, and subscribers choose which topics to listen to.
+For scalability reasons, Kafka provides not just one log: every topic consists of a configurable number of separate logs (called \emph{partitions}).
+All events within a given partition are totally ordered.
+This partitioning design has the advantage that different partitions can be handled by different nodes without requiring coordination; it has the disadvantage that there is no defined ordering of events across different partitions.
+
+Therefore, when Kafka is used in an event sourcing/SMR style, we have to either use a single partition (limiting the scalability of the system), or break the state of the system into independent partitions to match the partitioning of the event logs.
+For example, if the state can be broken up by entity (so that each event relates to one entity, and the state of an entity is determined only by the events relating to that entity), then we can ensure that all events relating to the same entity are placed into the same partition.
+Each event log partition can then be processed independently to obtain the state for the entities within that partition.
+(Having a separate partition per entity is not practical in Kafka since it is designed to have a fairly small number of partitions; hence it is necessary to multiplex many entities' events into a single partition.)
+
+The situation is more complicated if the system cannot be neatly broken down into separate partitions: for example, if one event may relate to multiple entities (e.g.\ it represents the transfer of money from one entity to another), then it is no longer sufficient to process the events in each partition independently.
+\emph{Online event processing} (OLEP)~\cite{Kleppmann:2019olep} is an approach for handling such multi-partition interactions by breaking them down into multiple stream processing stages.
+
+In some applications, an event needs to be checked against the current state of the system to determine whether it is allowed.
+For example, an event representing the booking of a seat in a theatre may be allowed only if that seat is not already taken.
+In a mutable-state database model, such a validation would be performed by a transaction that first reads the current state of the database (whether the seat is available), and then writes its update only if the check succeeded.
+Kafka does not natively support such validations, but it is possible to implement them using a two-stage stream processing pipeline: an initial event represents only the \emph{intention} to perform a certain action; then a stream processor joins that event with the current state to determine whether the action is permitted, and if so, emits a new event to a stream of validated events~\cite{Kleppmann:2019olep}.
+
+\subsection{Local-first Collaboration Software}\label{sec:collaboration}
 
 Over the past several years, my collaborators and I have been working on new foundations for collaboration software, that is, applications that allow several users to collaboratively modify a shared file.
 The file could be a text document, a drawing, a spreadsheet, a to-do list, or many other types of data.
