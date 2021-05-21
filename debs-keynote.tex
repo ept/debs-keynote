@@ -1,9 +1,20 @@
-\documentclass[sigconf,nonacm]{acmart}
+\documentclass[sigconf]{acmart}
 \usepackage[frozencache=true]{minted}
-\usepackage{tikz} % for figures
+\usepackage{tikz}
 \usetikzlibrary{arrows.meta,shapes.geometric}
 
+\hypersetup{draft} % TODO remove for final version
+
 \hyphenation{time-stamp time-stamps re-con-cilia-tion data-center}
+
+\copyrightyear{2021}
+\acmYear{2021}
+\setcopyright{acmlicensed}
+\acmConference[DEBS '21]{15th ACM International Conference on Distributed and Event-Based Systems}{June 28--July 2, 2021}{Milan, Italy}
+\acmBooktitle{15th ACM International Conference on Distributed and Event-Based Systems (DEBS '21), June 28--July 2, 2021, Milan, Italy}
+\acmPrice{15.00}
+\acmDOI{10.1145/XXXXXXX.XXXXXXX}
+\acmISBN{978-1-XXXX-XXXX}
 
 \begin{document}
 \title{Thinking in Events: From Databases to Distributed Collaboration Software}
@@ -19,7 +30,10 @@
 \email{mk428@cst.cam.ac.uk}
 
 \begin{abstract}
-TODO: Abstract
+In this keynote I give a subjective but systematic overview of the landscape of distributed event-based systems, with an emphasis on two areas I have worked on over the last decade: large-scale stream processing with Apache Kafka and associated tools, and real-time collaboration software in the style of Google Docs.
+While these may seem at first glance to be very different topics, there are also important points of overlap.
+This paper lays out a taxonomy of event-based systems that shows where their commonalities and differences lie.
+It also highlights some of the key trade-offs that arise in the implementation of event-based systems, drawing both from distributed systems theory and from experience of their practical deployment.
 \end{abstract}
 
 \begin{CCSXML}
@@ -52,7 +66,7 @@ TODO: Abstract
 \ccsdesc[300]{Applied computing~Event-driven architectures}
 \ccsdesc[300]{Theory of computation~Distributed computing models}
 
-\keywords{stream processing, event sourcing, CRDTs, state machine replication}
+\keywords{stream processing, event sourcing, state machine replication, CRDTs, real-time collaboration}
 \maketitle
 
 \def\figureautorefname{Figure}
@@ -60,23 +74,24 @@ TODO: Abstract
 \def\subsectionautorefname{Section}
 \def\subsubsectionautorefname{Section}
 
-% Title: Event-based thinking in collaboration software
-
-% What do Google Docs and stream processing have in common? Both are centered around the idea of streams of events. In the case of Google Docs and other collaboration software, each event describes a change that a user has made to a document. Each user's local device has a copy of the shared document, and processing the stream of changes means updating this local copy so that it is consistent with all of the other users' copies of the document.
-
-% This talk will explore collaboration software through the lens of event-based thinking, explaining some of the algorithms that are used to implement this kind of software, such as Conflict-free Replicated Data Types (CRDTs). We will highlight new developments in this area, such as local-first software, and identify some open challenges in the area.
-
 \section{Introduction}
 
-TODO: Introduction
+The term \emph{event} means many different things in different branches of computing.
+The goal of this paper is to illuminate, categorise, and differentiate some of the main families of event-based systems, with an emphasis on systems that are also distributed.
+
+\autoref{sec:taxonomy} presents a taxonomy that breaks down the field into categories based on simple technical criteria.
+Each category is illustrated with examples of practical systems that employ the approach, and it includes a discussion of the trade-offs: the pros and cons of choosing one category over another.
+My hope is that this taxonomy will provide a useful structure and vocabulary to researchers and practitioners working with event-based systems, allowing us to more easily communicate and reason about the fundamental design choices of such systems.
+
+Next, in \autoref{sec:practical} I present a personal perspective on two particular families of event-based systems that I have worked on over the last decade: Apache Kafka and its stream processing ecosystem (which I worked on in 2012--2015 during my time as industrial software engineer at LinkedIn), and multi-user real-time collaboration software in the style of Google Docs (which has been the focus of my research since returning to academia in 2015).
+Reflecting on these systems in the context of the taxonomy of \autoref{sec:taxonomy} helps further illuminate the characteristics of event-based software architecture.
+
 
 \section{A Taxonomy of Event-based Systems}\label{sec:taxonomy}
 
-The term \emph{event} is used in many different ways in different branches of computing.
-Many authors talk about events without always being explicit about the exact context they are referring to.
-In order to facilitate a precise discussion of the trade-offs, I present a taxonomy that categorises the different uses of events, based on the flowchart in \autoref{fig:flowchart}.
+The following taxonomy categorises the different uses of events based on the flowchart in \autoref{fig:flowchart}.
 Such a broad-brush taxonomy cannot necessarily capture all of the nuance of the field, and sometimes the boundaries between categories can be blurry.
-Nevertheless, I hope that it will be a useful tool for structuring discussions.
+Nevertheless, I hope that it will be a useful tool for understanding event-based systems.
 
 \begin{figure*}
 \begin{tikzpicture}
