@@ -3,8 +3,6 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,shapes.geometric}
 
-\hypersetup{draft} % TODO remove for final version
-
 \hyphenation{time-stamp time-stamps re-con-cilia-tion data-center}
 
 \copyrightyear{2021}
@@ -33,7 +31,7 @@
 In this keynote I give a subjective but systematic overview of the landscape of distributed event-based systems, with an emphasis on two areas I have worked on over the last decade: large-scale stream processing with Apache Kafka and associated tools, and real-time collaboration software in the style of Google Docs.
 While these may seem at first glance to be very different topics, there are also important points of overlap.
 This paper lays out a taxonomy of event-based systems that shows where their commonalities and differences lie.
-It also highlights some of the key trade-offs that arise in the implementation of event-based systems, drawing both from distributed systems theory and from experience of their practical deployment.
+It also highlights some of the key trade-offs that arise in the implementation of event-based systems, drawing both from distributed systems theory and from experience of their practical deployment, and outlines a number of open research problems.
 \end{abstract}
 
 \begin{CCSXML}
@@ -85,7 +83,7 @@ My hope is that this taxonomy will provide a useful structure and vocabulary to 
 
 Next, in \autoref{sec:practical} I present a personal perspective on two particular families of event-based systems that I have worked on over the last decade: Apache Kafka and its stream processing ecosystem (which I worked on in 2012--2015 during my time as industrial software engineer at LinkedIn), and multi-user real-time collaboration software in the style of Google Docs (which has been the focus of my research since returning to academia in 2015).
 Reflecting on these systems in the context of the taxonomy of \autoref{sec:taxonomy} helps further illuminate the characteristics of event-based software architecture.
-
+Finally, \autoref{sec:future-work} outlines some open problems that, I believe, deserve further attention from researchers.
 
 \section{A Taxonomy of Event-based Systems}\label{sec:taxonomy}
 
@@ -208,7 +206,7 @@ More recently, \emph{change data capture} techniques have been developed to extr
 \subsection{State machine replication (SMR)}\label{sec:smr}
 
 In WAL-based replication and change data capture, the primary data model used by the application is the database state that can be mutated by the application (e.g.\ by inserting, updating, or deleting rows in tables), and the data change events are generated automatically as a side-effect of these mutations.
-It is also possible to swap these roles, making the data change events the primary data model of the application, so that any state changes become a side-effect of processing those events.
+It is also possible to swap these roles, making the data change events the primary data model of the application, so that any state changes become a side-effect of processing those events~\cite{Kreps:2011}.
 This is the idea behind \emph{state machine replication} (SMR)~\cite{Schneider:1990}, and the closely related concept of \emph{event sourcing}~\cite{Fowler:2005,Zimarev:2020}.
 My 2014 talk \emph{Turning the database inside-out}~\cite{InsideOut} also helped popularise this idea.
 
@@ -332,9 +330,9 @@ In the extreme case, if we want a replica to be able to generate and process eve
 
 In a system that allows disconnected operation, the strongest order we can guarantee is a causal order~\cite{Attiya:2015}.
 This is a \emph{partial} order, in contrast to the total order of a log.
-In a causally ordered system, some events \emph{happen before} other events~\cite{Lamport:1978}, and those events are processed in the same order by all relicas.
+In a causally ordered system, some events \emph{happen before} other events~\cite{Lamport:1978}, and those events are processed in the same order by all replicas.
 However, other events may be \emph{concurrent}, which means that neither happened before the other; in this case, different replicas may process those events in a different order~\cite{Birman:1991}.
-A partially ordered form of replication is also known as \emph{opimistic replication}~\cite{Saito:2005}.
+A partially ordered form of replication is also known as \emph{optimistic replication}~\cite{Saito:2005}.
 
 In a partially ordered system it is still possible to enforce a total order on events after the fact, as illustrated in \autoref{fig:timestamp-order}.
 We do this by attaching a logical timestamp to each event; Lamport timestamps~\cite{Lamport:1978} are a common choice.
@@ -373,7 +371,7 @@ Applications may mutate these structures through the operations provided by the 
 These mutations can take place even while a replica is disconnected from the rest of the system.
 
 In operation-based CRDTs, the CRDT algorithm tracks any mutations to a data object and generates events (usually called \emph{operations}) describing the changes.
-These events are partially ordered; causal ordering, like in \autoref{sec:partial-order}, is a common choice.
+These events are partially ordered; causal ordering, like in \autoref{sec:partial-order}, is a common choice~\cite{Gomes:2017}.
 When a replica receives an event generated by another replica, it invokes the CRDT algorithm to update its state.
 This algorithm is carefully designed such that applying concurrent events is commutative: that is, the final state is the same, regardless of the order in which a replica applies a set of concurrent events.
 By relying on commutativity, CRDTs ensure that replicas converge to a consistent state, without requiring that all replicas process events in the same order.
@@ -406,7 +404,7 @@ The Kafka ecosystem includes stream processing frameworks (Kafka Streams, Flink~
 Kafka-based stream processors are used for both windowed and non-windowed processing.
 
 Every event in Kafka belongs to a \emph{topic}, and subscribers choose which topics to listen to.
-For scalability reasons, Kafka provides not just one log: every topic consists of a configurable number of separate logs (called \emph{partitions}).
+For scalability reasons, Kafka provides not just one log: every topic consists of a configurable number of separate logs (called \emph{partitions} or \emph{shards}).
 All events within a given partition are totally ordered.
 This partitioning design has the advantage that different partitions can be handled by different nodes without requiring coordination; it has the disadvantage that there is no defined ordering of events across different partitions.
 
@@ -431,12 +429,12 @@ Software that runs on mobile devices needs to work offline: for example, you sho
 It is therefore clear that this type of application operates in the partially ordered, non-windowed, persistent part of the taxonomy.
 
 More specifically, we are designing this software according to the \emph{local-first} approach~\cite{Kleppmann:2019}, in which every end-user device from which a user accesses their data is treated as a full-fledged replica using its local on-device storage.
-When a user modifies their data, they immediately update the replica on their local device, even if it is offline, and any updates are synced to the replicas on other users' devices the next time a network connection is available.
+When a user modifies their data, they immediately update the replica on their local device, even if it is offline, and any updates are synced to the replicas on other devices the next time a network connection is available.
 
 We use CRDTs to implement this approach, and thus the events describing data updates are generated by the CRDT algorithm as a side-effect of a mutation of a replica's state.
-This model is a good fit for collaboration software because the user input takes the form of state mutations: for example, in a text document, a user needs to be able to insert or delete characters anywhere in the document.
-Moreover, what the user wants to see on screen is usually the current state of the document, not a log of all of the change events (although visualised change history is a useful feature too).
+As explained in \autoref{sec:crdts}, this model is a good fit for collaboration software where user input takes the form of state mutations.
 To this end we have developed a CRDT library called Automerge,\footnote{\url{https://github.com/automerge/automerge}} which provides a JSON data model.
+This data model is sufficient for implementing a variety of applications~\cite{Kleppmann:2019,vanHardenberg:2020}.
 
 CRDT-generated events also serve as notification that a document has changed, which enables real-time collaboration among several users editing the same document.
 We handle such events using a \emph{functional reactive programming} model illustrated in \autoref{fig:pushpin}.
@@ -445,18 +443,71 @@ A rendering function takes this data structure and translates it into the corres
 In web applications, Facebook's React\footnote{\url{https://reactjs.org/}} is a popular library for performing this kind of rendering.
 
 The rendered user interface has attached event handlers that are called when the user interacts with the respective user interface elements (these events are ephemeral).
-When such an event handler is called, it does not update the user interface directly, but rather it mutates the Automerge state to reflect the user input, and then the rendering function is called again to update the user interface.
+When such an event handler is called, it does not update the user interface directly, but rather it mutates the Automerge CRDT state to reflect the user input, and then the rendering function is called again to update the user interface.
 This functional reactive programming model makes the software easy to reason about, because data flows only one way: the user interface state is always derived from the Automerge state, not the other way around.
 
 When a user thus mutates the Automerge state, the CRDT generates a change event, persists it locally, and uses a messaging middleware or sync protocol to send it to all other devices that have a replica of that document.
 When a replica receives such an event from a remote user, it uses the CRDT logic to update the local Automerge state, and then calls the rendering function in exactly the same way as it does for a change made by the local user.
 Using the same code paths and data flows for real-time collaboration as for local user input significantly simplifies the programming model.
+This approach is discussed in more detail in our paper on PushPin~\cite{vanHardenberg:2020}, one of our local-first software prototypes.
 
-This approach is discussed in more detail in our prior paper on PushPin~\cite{vanHardenberg:2020}, one of our local-first software prototypes.
+The change events generated by the CRDT represent the editing history of the document; we can think of these events as being similar to commits in a Git commit history.
+Persisting these events provides useful capabilities: we can reconstruct the state of the document at any past moment in time, and compute the differences between versions of the document to visualise the change history.
+We can also support collaboration workflows in which one user suggests changes to a document and another user can accept or reject the changes: in Git terms, one user can create a \emph{branch} (a set of commits that are not yet part of the main document version), and another user can choose whether to \emph{merge} it.
+Any number of branches can exist at the same time, and users can tentatively combine them to see what the document state would be if the branches were merged.
+Enabling such advanced workflows is a direct consequence of representing the application state as a partially ordered set of change events.
 
-\section{Conclusions}
+\section{Conclusions and Future Work}\label{sec:future-work}
 
-TODO
+Events are used to great effect in a wide variety of systems, and this paper has provided a systematic overview of the field of event-based software.
+The taxonomy of \autoref{sec:taxonomy} categorises event-based systems based on some simple criteria: whether the events are persistent, whether they act as notifications (triggering the execution of application code), whether there is a time bound on events that can be joined, whether the events are totally or partially ordered, and whether the application's primary model for expressing changes is by mutating state or by generating events.
+As we saw in this paper, there is no one true way: all of the categories in the taxonomy have important use cases.
+I have given examples of those use cases, and highlighted some of the key trade-offs that determine the pros and cons of different categories depending on the situation.
+
+I will close by outlining some open questions and challenges for future research.
+
+\subsection{Multi-version/Branching Workflows}
+
+Most replicated systems are based on the assumption that every replica should immediately process every event it receives, so that its state is as up-to-date as possible.
+However, sometimes this is not actually what we want: as suggested in \autoref{sec:collaboration}, we may want to tentatively make some changes to a copy of a dataset, allow several users to inspect and discuss these changes, and then decide later whether to merge them into the primary copy of the dataset.
+In source code repositories we do this all the time with branches, merges, and pull requests; why can we not do the same with other forms of data?
+
+Database transactions support a weak form of multi-version concurrency control by allowing an uncommitted transaction's writes to be either committed or rolled back by aborting the transaction~\cite{Bernstein:1983}.
+However, most databases do not allow one user to share the state of an uncommitted transaction with another user, and most databases do not allow the user to find out what data has changed in an uncommitted transaction (the equivalent of \verb+git diff+).
+Moreover, an uncommitted transaction may hold locks and thus prevent other transactions from making progress.
+
+Partially ordered event-based systems are well placed to support such branching-and-merging workflows, since they already make data changes explicit in the form of events, and their support for concurrent updates allows several versions of a dataset to coexist side-by-side.
+CRDTs provide us with a mechanism for merging such diverged versions of a dataset.
+However, there are many open questions around how such systems should handle data versioning, including comparing and visualising differences between versions of a dataset, and which internal representations systems can use to operate on such multi-versioned data.
+
+\subsection{Data Model Changes}
+
+A challenge in many event-based systems is how to handle changes in the schema or data format~\cite{Overeem:2017}.
+The problem is especially pronounced in systems where we cannot guarantee that all replicas are running the same version of the software.
+For example, in applications that run on end-users' devices, it is up to the user to decide when to install a software update; thus, a user who is hesitant to install updates may be running a much older version of an application than a user who always installs the latest version.
+Nevertheless, those users should be able to interoperate as much as possible, which means that any data format changes must be both forward and backward compatible.
+The challenge becomes even greater if users are able to customise the software they are running, e.g.\ through end-user programming~\cite{EndUserProgramming}.
+
+In systems that are based on immutable events, one promising approach is to use bidirectional functions (lenses) to convert between different versions of a data model, which allows different replicas to use different state representations while still being able to interoperate~\cite{Litt:2021}.
+Open questions include how far this type of conversion can extend, how to support a range of different data models, how to make this programming model more accessible to application developers, and how to make it efficient.
+
+\subsection{Data Change Notifications Everywhere}
+
+There is growing commercial interest in systems that perform materialized view maintenance on top of event streams: startups in this area include Materialize\footnote{\url{https://materialize.com/}} (based on differential dataflow~\cite{McSherry:2013}), RelationalAI,\footnote{\url{https://www.relational.ai/} -- disclosure: RelationalAI financially supports my work} and Event Store.\footnote{\url{https://www.eventstore.com/}}
+A common thread in these efforts is wanting to provide a higher-level programming model with strong semantics, whereas the Kafka ecosystem has generally prioritised low-level work on scalability and fault tolerance~\cite{Brandon:2021}.
+
+Despite this progress, the core issues I raised in \emph{Turning the database inside-out} in 2014~\cite{InsideOut} are still unsolved.
+Most application logic is still executed in a request-response model: when the application receives a request, it queries a database and returns the result as of that point in time, but the client cannot subscribe to be notified whenever the query result changes (other than by making repeated requests, i.e.\ polling, which is slow and inefficient).
+Incrementally maintained materialized views offer the potential to replace the request-response paradigm with a publish-subscribe paradigm, where a client can obtain not only the current state of some resource, but also subscribe to a stream of events that provide a low-latency notification whenever that state changes.
+
+Our use of FRP for collaboration software (\autoref{sec:collaboration}) is one instantiation of this idea in the context of application software running on the end user's device.
+However, we are yet to see a comparable change in the architecture of today's cloud-based service-oriented/microservices systems.
+Changing this status quo requires innovations both in the programming model (how do application developers express how the state of a system must change as a result of underlying events?) and in the execution (how does the system efficiently implement these operations?).
+Incrementally maintained materializations of SQL queries (such as the example in \autoref{sec:windowing}) are a good start, but more is needed to fully realise this vision, such as incorporating arbitrary business logic into the view materialization process.
+
+\section*{Acknowledgements}
+
+Martin Kleppmann is supported by a Leverhulme Trust Early Career Fellowship, the Isaac Newton Trust, Nokia Bell Labs, and crowdfunding supporters including Ably, Adri{\` a} Arcarons, Chet Corcos, Macrometa, Mintter, David Pollak, RelationalAI, SoftwareMill, Talent Formation Network, and Adam Wiggins.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}{}
